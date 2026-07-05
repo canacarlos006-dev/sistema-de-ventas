@@ -1,1 +1,0 @@
-escáner_de_sistema.html
