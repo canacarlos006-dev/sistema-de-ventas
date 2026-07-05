@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Control - Inventario y Deudores</title>
+    <!-- Librería para escaneo de códigos de barra/QR -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-surface: #1e293b;
+            --text-main: #f8fafc;
+            --accent: #38bdf8;
+            --accent-hover: #0ea5e9;
+            --danger: #ef4444;
+            --success: #22c55e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            padding-bottom: 70px;
+        }
+
+        header {
+            background-color: var(--bg-surface);
+            padding: 15px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-bottom: 2px solid var(--accent);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .container {
+            padding: 15px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Vistas */
+        .view {
+            display: none;
+        }
+        .view.active {
+            display: block;
+        }
+
+        /* Tarjetas y Formularios */
+        .card {
+            background-color: var(--bg-surface);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+
+        h2 {
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+            color: #94a3b8;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--bg-primary);
+            border: 1px solid #475569;
+            border-radius: 6px;
+            color: white;
+            font-size: 1rem;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: var(--accent);
+            color: var(--bg-primary);
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:active {
+            background-color: var(--accent-hover);
+        }
+
+        button.btn-secondary {
+            background-color: #475569;
+            color: white;
+            margin-top: 5px;
+        }
+
+        /* Escáner */
+        #reader {
+            width: 100%;
+            background: black;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        /* Listas y Elementos */
+        .item-list {
+            list-style: none;
+        }
+
+        .item-card {
+            background: #273549;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .item-details span {
+            display: block;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .badge-reg { background-color: #0284c7; color: white; }
+        .badge-ven { background-color: var(--success); color: white; }
+
+        /* Navegación Inferior (Estilo Móvil) */
+        nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background-color: var(--bg-surface);
+            display: flex;
+            border-top: 1px solid #334155;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            flex: 1;
+            background: none;
+            color: #94a3b8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: normal;
+            padding: 0;
+            border-radius: 0;
+        }
+
+        .nav-btn.active {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        .nav-btn svg {
+            width: 24px;
+            height: 24px;
+            margin-bottom: 2px;
+            fill: currentColor;
+        }
+
+        /* Utilidades */
+        .flex-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .btn-delete-item {
+            background-color: var(--danger);
+            color: white;
+            font-size: 0.85rem;
+            padding: 6px 10px;
+            width: auto;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .btn-delete-item:active {
+            background-color: #b91c1c;
+        }
+    </style>
+</head>
+<body>
+
+    <header id="app-title">Escanear / Operaciones</header>
+
+    <div class="container">
+        
+        <!-- VISTA 1: ESCANEO Y OPERACIONES RÁPIDAS -->
+        <div id="view-scan" class="view active">
+            <div class="card">
+                <h2>Cámara / Escáner</h2>
+                <div id="reader"></div>
+                
+                <div class="form-group">
+                    <label>Código de Barras / Sello Detectado</label>
+                    <input type="text" id="scan-code" placeholder="Esperando escaneo o ingresa manual">
+                </div>
+
+                <div class="form-group">
+                    <label>Nombre del Producto</label>
+                    <input type="text" id="scan-name" placeholder="Ej. Harina Pan 1kg, Refresco...">
+                </div>
+
+                <div class="form-group">
+                    <label>Precio del Producto ($)</label>
+                    <input type="number" step="0.01" id="scan-price" placeholder="0.00">
+                </div>
+
+                <div class="flex-buttons">
+                    <button onclick="procesarEscaneo('registrar')">Registrar Stock</button>
+                    <button onclick="procesarEscaneo('vender')" style="background-color: var(--success);">Escanear y Vender</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Últimos Movimientos de Productos</h2>
+                <ul id="product-history" class="item-list"></ul>
+            </div>
+        </div>
+
+        <!-- VISTA 2: CONTROL DE DEUDORES -->
+        <div id="view-debtors" class="view">
+            <div class="card">
+                <h2>Agregar Nuevo Deudor</h2>
+                <div class="form-group">
+                    <label>Nombre del Cliente</label>
+                    <input type="text" id="debtor-name" placeholder="Ej. Juan Pérez">
+                </div>
+                <div class="form-group">
+                    <label>Deuda Inicial ($)</label>
+                    <input type="number" step="0.01" id="debtor-initial" placeholder="0.00 (Opcional)">
+                </div>
+                <button onclick="agregarDeudor()">Guardar Cliente</button>
+            </div>
+
+            <div class="card">
+                <h2>Lista de Cuentas por Cobrar</h2>
+                <ul id="debtors-list" class="item-list"></ul>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- NAVEGACIÓN INFERIOR APPS -->
+    <nav>
+        <button class="nav-btn active" onclick="switchView('scan', this)">
+            <svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zm2 2v3h3V6zm5 5h7v7h-7zm2 2v3h3v-3zM4 13h7v7H4zm2 2v3h3v-3zm13-9h-3v3h3zm0 5h-3v2h3v-2zm-5 5h2v2h-2zm2 2h3v-3h-3zm0-4h2v2h-2z"/></svg>
+            Escaner
+        </button>
+        <button class="nav-btn" onclick="switchView('debtors', this)">
+            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            Deudores
+        </button>
+    </nav>
+
+    <!-- CUADRO DE DIÁLOGO MODAL PARA ABONOS / FIADOS -->
+    <div id="debt-modal" class="view" style="position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.8); z-index:200; padding: 20px; align-items: center; justify-content: center;">
+        <div class="card" style="width: 100%; max-width: 400px; margin: auto; margin-top: 20vh;">
+            <h2 id="modal-title">Modificar Cuenta</h2>
+            <input type="hidden" id="modal-debtor-id">
+            <div class="form-group">
+                <label id="modal-label-action">Monto ($)</label>
+                <input type="number" step="0.01" id="modal-amount" placeholder="0.00">
+            </div>
+            <div class="flex-buttons">
+                <button id="modal-action-btn" onclick="ejecutarTransaccionDeuda()">Aplicar</button>
+                <button class="btn-secondary" onclick="cerrarModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- INICIALIZACIÓN DE DATOS (LOCALSTORAGE) ---
+        let productos = JSON.parse(localStorage.getItem('prod_historial')) || [];
+        let deudores = JSON.parse(localStorage.getItem('deudores_list')) || [];
+        let html5QrcodeScanner = null;
+        let transaccionActual = ''; 
+
+        // --- NAVEGACIÓN EN PANTALLA ---
+        function switchView(viewId, btn) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            
+            document.getElementById(`view-${viewId}`).classList.add('active');
+            btn.classList.add('active');
+            
+            const titles = { scan: "Escanear / Operaciones", debtors: "Control de Deudores" };
+            document.getElementById('app-title').innerText = titles[viewId];
+
+            if (viewId === 'scan') { startScanner(); } else { stopScanner(); }
+        }
+
+        // --- MOTOR DE ESCANEO DE CÁMARA ---
+        function startScanner() {
+            if (!html5QrcodeScanner) {
+                html5QrcodeScanner = new Html5Qrcode("reader");
+                const config = { fps: 15, qrbox: { width: 250, height: 150 } };
+                
+                html5QrcodeScanner.start(
+                    { facingMode: "environment" }, 
+                    config, 
+                    (decodedText) => {
+                        document.getElementById('scan-code').value = decodedText;
+                        vibrarCelular();
+                        prellenarDatosSiExiste(decodedText);
+                    },
+                    (errorMessage) => { }
+                ).catch(err => console.error("Error de cámara: ", err));
+            }
+        }
+
+        function stopScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.stop().then(() => { html5QrcodeScanner = null; }).catch(err => console.log(err));
+            }
+        }
+
+        function vibrarCelular() {
+            if (navigator.vibrate) navigator.vibrate(100);
+        }
+
+        // Si ya registraste el producto antes, te autocompleta el nombre y el precio guardado
+        function prellenarDatosSiExiste(codigo) {
+            const encontrado = productos.find(p => p.codigo === codigo);
+            if (encontrado) {
+                document.getElementById('scan-name').value = encontrado.nombre || '';
+                document.getElementById('scan-price').value = encontrado.precio;
+            }
+        }
+
+        // --- OPERACIONES DE PRODUCTOS (REGISTRAR / VENDER / ELIMINAR) ---
+        function procesarEscaneo(tipo) {
+            const codigo = document.getElementById('scan-code').value.trim();
+            const nombre = document.getElementById('scan-name').value.trim() || "Producto Sin Nombre";
+            const precio = parseFloat(document.getElementById('scan-price').value);
+
+            if (!codigo || isNaN(precio) || precio <= 0) {
+                alert("Por favor escanee un código e introduzca un precio válido.");
+                return;
+            }
+
+            const nuevoRegistro = {
+                id: Date.now(),
+                codigo: codigo,
+                nombre: nombre,
+                precio: precio.toFixed(2),
+                tipo: tipo,
+                fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            productos.unshift(nuevoRegistro);
+            localStorage.setItem('prod_historial', JSON.stringify(productos));
+            
+            // Limpiar campos
+            document.getElementById('scan-code').value = '';
+            document.getElementById('scan-name').value = '';
+            document.getElementById('scan-price').value = '';
+
+            renderProductos();
+            alert(`"${nombre}" ${tipo === 'registrar' ? 'Registrado' : 'Vendido'} con éxito.`);
+        }
+
+        function eliminarProducto(id) {
+            if (confirm("¿Quieres eliminar este registro del historial?")) {
+                productos = productos.filter(p => p.id !== id);
+                localStorage.setItem('prod_historial', JSON.stringify(productos));
+                renderProductos();
+            }
+        }
+
+        function renderProductos() {
+            const lista = document.getElementById('product-history');
+            lista.innerHTML = '';
+            
+            productos.slice(0, 15).forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'item-card';
+                li.innerHTML = `
+                    <div class="item-details" style="flex: 1; padding-right: 8px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                            <button onclick="eliminarProducto(${p.id})" class="btn-delete-item">X</button>
+                            <span style="font-weight:bold; color:#fff; font-size:1.05rem;">${p.nombre}</span>
+                        </div>
+                        <span style="font-size:0.8rem; color:#94a3b8; padding-left: 30px;">Cód: ${p.codigo} | Hora: ${p.fecha}</span>
+                    </div>
+                    <div style="text-align: right; min-width: 85px;">
+                        <span style="display:block; font-weight:bold; margin-bottom:4px; font-size:1.1rem;">$${p.precio}</span>
+                        <span class="badge ${p.tipo === 'registrar' ? 'badge-reg' : 'badge-ven'}">${p.tipo.toUpperCase()}</span>
+                    </div>
+                `;
+                lista.appendChild(li);
+            });
+        }
+
+        // --- SISTEMA DE DEUDORES (FIADOS / ABONOS / ELIMINAR) ---
+        function agregarDeudor() {
+            const nombre = document.getElementById('debtor-name').value.trim();
+            const saldoInicial = parseFloat(document.getElementById('debtor-initial').value) || 0;
+
+            if (!nombre) {
+                alert("El nombre del deudor es obligatorio.");
+                return;
+            }
+
+            const nuevoDeudor = {
+                id: Date.now(),
+                nombre: nombre,
+                balance: parseFloat(saldoInicial.toFixed(2))
+            };
+
+            deudores.push(nuevoDeudor);
+            localStorage.setItem('deudores_list', JSON.stringify(deudores));
+            
+            document.getElementById('debtor-name').value = '';
+            document.getElementById('debtor-initial').value = '';
+            
+            renderDeudores();
+        }
+
+        function eliminarDeudor(id, nombre) {
+            if (confirm(`¿Estás seguro de que quieres eliminar a "${nombre}" del sistema? Se borrará toda su cuenta.`)) {
+                deudores = deudores.filter(d => d.id !== id);
+                localStorage.setItem('deudores_list', JSON.stringify(deudores));
+                renderDeudores();
+            }
+        }
+
+        function renderDeudores() {
+            const lista = document.getElementById('debtors-list');
+            lista.innerHTML = '';
+
+            deudores.forEach(d => {
+                const li = document.createElement('li');
+                li.className = 'item-card';
+                li.innerHTML = `
+                    <div class="item-details" style="flex: 1; padding-right: 8px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+                            <button onclick="eliminarDeudor(${d.id}, '${d.nombre}')" class="btn-delete-item">X</button>
+                            <span style="font-weight:bold; color:white; font-size:1.1rem;">${d.nombre}</span>
+                        </div>
+                        <span style="color:${d.balance > 0 ? '#ef4444' : '#22c55e'}; font-weight:bold; padding-left: 32px;">
+                            Debe: $${d.balance.toFixed(2)}
+                        </span>
+                    </div>
+                    <div class="flex-buttons" style="margin-top:0; flex-direction:column; gap:4px;">
+                        <button onclick="abrirModal(${d.id}, 'abonar')" style="background-color:var(--success); font-size:0.85rem; padding:6px 12px;">Abonar</button>
+                        <button onclick="abrirModal(${d.id}, 'fiar')" style="background-color:var(--danger); font-size:0.85rem; padding:6px 12px; color:white;">Fiar (+)</button>
+                    </div>
+                `;
+                lista.appendChild(li);
+            });
+        }
+
+        // --- VENTANA MODAL DE INTERACCIÓN FINANCIERA ---
+        function abrirModal(id, accion) {
+            const deudor = deudores.find(d => d.id === id);
+            if (!deudor) return;
+
+            transaccionActual = accion;
+            document.getElementById('modal-debtor-id').value = id;
+            document.getElementById('debt-modal').style.display = 'flex';
+            document.getElementById('modal-amount').value = '';
+
+            if (accion === 'abonar') {
+                document.getElementById('modal-title').innerText = `Abono para ${deudor.nombre}`;
+                document.getElementById('modal-label-action').innerText = "Monto a restar de la cuenta ($)";
+                document.getElementById('modal-action-btn').style.backgroundColor = 'var(--success)';
+            } else {
+                document.getElementById('modal-title').innerText = `Nuevo Fiado para ${deudor.nombre}`;
+                document.getElementById('modal-label-action').innerText = "Monto a sumar a la cuenta ($)";
+                document.getElementById('modal-action-btn').style.backgroundColor = 'var(--danger)';
+            }
+        }
+
+        function cerrarModal() {
+            document.getElementById('debt-modal').style.display = 'none';
+        }
+
+        function ejecutarTransaccionDeuda() {
+            const id = parseInt(document.getElementById('modal-debtor-id').value);
+            const monto = parseFloat(document.getElementById('modal-amount').value);
+            
+            if (isNaN(monto) || monto <= 0) {
+                alert("Ingresa un monto válido mayor a cero.");
+                return;
+            }
+
+            const deudor = deudores.find(d => d.id === id);
+            if (deudor) {
+                if (transaccionActual === 'abonar') {
+                    deudor.balance -= monto;
+                } else if (transaccionActual === 'fiar') {
+                    deudor.balance += monto;
+                }
+                
+                deudor.balance = parseFloat(deudor.balance.toFixed(2));
+                
+                localStorage.setItem('deudores_list', JSON.stringify(deudores));
+                renderDeudores();
+                cerrarModal();
+            }
+        }
+
+        // --- ARRANQUE AUTOMÁTICO ---
+        window.onload = () => {
+            renderProductos();
+            renderDeudores();
+            startScanner();
+        };
+    </script>
+</body>
+</html>
